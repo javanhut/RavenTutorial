@@ -6,7 +6,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
@@ -117,9 +117,11 @@ func (t *tutorial) oraclePanel(installed bool) fyne.CanvasObject {
 
 // oracleHere is the panel when Oracle is already installed.
 func (t *tutorial) oracleHere() fyne.CanvasObject {
-	status := widget.NewLabelWithStyle(
-		"Oracle is installed on this machine.",
-		fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	mark := badge("Installed", theme.ColorNameSuccess)
+
+	status := widget.NewLabel("Oracle is on this machine, and nothing of it " +
+		"is running until you open it.")
+	status.Wrapping = fyne.TextWrapWord
 
 	buttons := container.NewHBox()
 	for _, a := range []App{
@@ -130,20 +132,23 @@ func (t *tutorial) oracleHere() fyne.CanvasObject {
 			continue
 		}
 		program := a
-		label := "Open Raven Oracle"
+		label, importance := "Open Raven Oracle", widget.HighImportance
 		if program.Terminal {
-			label = "Check This Machine"
+			label, importance = "Check This Machine", widget.MediumImportance
 		}
-		buttons.Add(widget.NewButtonWithIcon(label, theme.MediaPlayIcon(), func() {
-			if err := program.Start(); err != nil {
-				dialog.ShowError(err, t.win)
-			}
-		}))
+		button := widget.NewButtonWithIcon(label, theme.MediaPlayIcon(), func() {
+			t.start(program)
+		})
+		button.Importance = importance
+		buttons.Add(button)
 	}
 
 	return container.NewVBox(
-		status,
-		buttons,
+		card(container.NewBorder(
+			nil, nil,
+			container.NewCenter(avatar(App{Name: "Oracle", Exec: oracleApp}, 40)), nil,
+			container.NewVBox(mark, status, buttons),
+		)),
 		t.commandBlock("Give it a local model, to ask it questions", oracleModel),
 		t.commandBlock("If you want it gone again", oracleRemove),
 	)
@@ -152,16 +157,18 @@ func (t *tutorial) oracleHere() fyne.CanvasObject {
 // oracleMissing is the panel when it is not installed, which is what a fresh
 // Raven install looks like.
 func (t *tutorial) oracleMissing() fyne.CanvasObject {
+	mark := badge("Optional", theme.ColorNamePrimary)
+
 	status := widget.NewLabel(
 		"Oracle is not installed, which is the state a fresh Raven Linux " +
 			"comes in. Nothing on the system needs it.\n\n" +
 			"These commands fetch and install it. The tutorial does not run " +
 			"them for you - installing needs root, and a password prompt " +
-			"you cannot see is worse than four lines you can read.")
+			"you cannot see is worse than three lines you can read.")
 	status.Wrapping = fyne.TextWrapWord
 
 	return container.NewVBox(
-		status,
+		card(container.NewVBox(mark, status)),
 		t.commandBlock("Install it", oracleInstall),
 		t.commandBlock("Then, optionally, a local model for its questions", oracleModel),
 	)
@@ -169,22 +176,24 @@ func (t *tutorial) oracleMissing() fyne.CanvasObject {
 
 // commandBlock shows a few shell lines with a button that copies them and,
 // where there is a terminal to open, one that opens it.
-func (t *tutorial) commandBlock(title, commands string) fyne.CanvasObject {
-	text := widget.NewLabelWithStyle(commands, fyne.TextAlignLeading,
-		fyne.TextStyle{Monospace: true})
-
+func (t *tutorial) commandBlock(name, commands string) fyne.CanvasObject {
 	copyButton := widget.NewButtonWithIcon("Copy", theme.ContentCopyIcon(), func() {
 		t.app.Clipboard().SetContent(commands)
 	})
+	copyButton.Importance = widget.LowImportance
 
-	buttons := container.NewHBox(copyButton)
+	buttons := container.NewHBox(layout.NewSpacer(), copyButton)
 	if _, err := exec.LookPath(terminal); err == nil {
-		buttons.Add(widget.NewButtonWithIcon("Open a Terminal", theme.ComputerIcon(), func() {
-			if err := (App{Exec: terminal}).Start(); err != nil {
-				dialog.ShowError(err, t.win)
-			}
-		}))
+		open := widget.NewButtonWithIcon("Open a Terminal", theme.ComputerIcon(), func() {
+			t.start(App{Exec: terminal})
+		})
+		open.Importance = widget.LowImportance
+		buttons.Add(open)
 	}
 
-	return widget.NewCard(title, "", container.NewVBox(text, buttons))
+	return card(container.NewVBox(
+		sectionTitle(name),
+		codeBlock(commands),
+		buttons,
+	))
 }
